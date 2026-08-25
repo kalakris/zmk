@@ -27,6 +27,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/hid.h>
 #include <zmk/keymap.h>
 
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+#include <zmk/pointing/touch_stream.h>
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
 #define ONE_IF_DEV_OK(n)                                                                           \
     COND_CODE_1(DT_NODE_HAS_STATUS(DT_INST_PHANDLE(n, device), okay), (1 +), (0 +))
 
@@ -72,6 +76,7 @@ struct input_listener_processor_data {
 
 struct input_listener_config {
     uint8_t listener_index;
+    const struct device *device;
     struct input_listener_config_entry base;
     size_t layer_overrides_len;
     struct input_listener_layer_override layer_overrides[];
@@ -392,6 +397,7 @@ static void input_handler(const struct input_listener_config *config,
                                      n) static const struct input_listener_config config_##n =     \
              {                                                                                     \
                  .listener_index = n,                                                              \
+                 .device = DEVICE_DT_GET(DT_INST_PHANDLE(n, device)),                              \
                  .base = IL_EXTRACT_CONFIG(DT_DRV_INST(n), n, base),                               \
                  .layer_overrides_len = (0 DT_INST_FOREACH_CHILD(n, IL_ONE)),                      \
                  .layer_overrides = {DT_INST_FOREACH_CHILD_SEP_VARGS(n, IL_OVERRIDE, (, ), n)},    \
@@ -408,3 +414,89 @@ static void input_handler(const struct input_listener_config *config,
         ())
 
 DT_INST_FOREACH_STATUS_OKAY(IL_INST)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+#if VALID_LISTENER_COUNT > 0
+
+#define IL_CONFIG_REF(n)                                                                           \
+    COND_CODE_1(DT_NODE_HAS_STATUS(DT_INST_PHANDLE(n, device), okay), (&config_##n, ), ())
+
+static const struct input_listener_config *const touch_stream_listener_configs[] = {
+    DT_INST_FOREACH_STATUS_OKAY(IL_CONFIG_REF)};
+
+static bool config_entry_has_scroll_marker(const struct input_listener_config_entry *cfg) {
+    for (size_t p = 0; p < cfg->processors_len; p++) {
+        if (zmk_input_processor_is_touch_stream_scroll(cfg->processors[p].dev)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool layer_override_active(const struct input_listener_layer_override *override) {
+    uint32_t mask = override->layer_mask;
+    uint8_t layer = 0;
+    while (mask != 0) {
+        if (mask & BIT(0) && zmk_keymap_layer_active(layer)) {
+            return true;
+        }
+
+        layer++;
+        mask = mask >> 1;
+    }
+
+    return false;
+}
+
+// Evaluate whether a zmk,input-processor-touch-stream-scroll marker sits in
+// the processor chain that would handle an event from input_dev right now.
+// This mirrors the routing in filter_with_input_config(): overrides are
+// scanned in order; an active override containing the marker counts, and an
+// active override without process-next shadows everything after it
+// (including the base chain). Driven purely by current layer state, so it
+// is correct with no event in flight (e.g. the first frame of a touch with
+// the layer already held). Keep in sync with filter_with_input_config().
+bool zmk_input_listener_touch_stream_scroll_active(const struct device *input_dev) {
+    for (size_t i = 0; i < ARRAY_SIZE(touch_stream_listener_configs); i++) {
+        const struct input_listener_config *cfg = touch_stream_listener_configs[i];
+        if (cfg->device != input_dev) {
+            continue;
+        }
+
+        bool base_reachable = true;
+        for (size_t oi = 0; oi < cfg->layer_overrides_len; oi++) {
+            const struct input_listener_layer_override *override = &cfg->layer_overrides[oi];
+            if (!layer_override_active(override)) {
+                continue;
+            }
+
+            if (config_entry_has_scroll_marker(&override->config)) {
+                return true;
+            }
+
+            if (!override->process_next) {
+                base_reachable = false;
+                break;
+            }
+        }
+
+        if (base_reachable && config_entry_has_scroll_marker(&cfg->base)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+#else
+
+bool zmk_input_listener_touch_stream_scroll_active(const struct device *input_dev) {
+    ARG_UNUSED(input_dev);
+    return false;
+}
+
+#endif // VALID_LISTENER_COUNT > 0
+
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)

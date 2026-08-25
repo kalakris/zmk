@@ -1,0 +1,16 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+description: |
+  Marker input processor for the raw touch stream (CONFIG_ZMK_TOUCH_STREAM).
+
+  Passes events through unchanged. Its presence in an input listener's
+  processor chain marks a "scroll context" for the touch-stream module:
+  while the chain containing this processor would handle events from a
+  streaming pad (i.e. it is the listener's base chain, or a layer overlay
+  whose layer is currently active), the pad's streamed frames carry the
+  scroll-mode flag.
+
+compatible: "zmk,input-processor-touch-stream-scroll"
+
+include: ip_zero_param.yaml

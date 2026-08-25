@@ -53,6 +53,23 @@ struct zmk_hid_touch_stream_report *zmk_hid_get_touch_stream_report() {
     return &touch_stream_report;
 }
 
+static struct zmk_hid_touch_stream_feature_report touch_stream_feature_report = {
+    .report_id = ZMK_HID_REPORT_ID_TOUCH_STREAM,
+    .body = {.protocol_version = ZMK_HID_TOUCH_STREAM_PROTOCOL_VERSION}};
+
+void zmk_hid_touch_stream_set_feature(uint8_t pads_present, uint8_t resolution,
+                                      uint8_t orientation, uint16_t x_max, uint16_t y_max) {
+    touch_stream_feature_report.body.pads_present = pads_present;
+    touch_stream_feature_report.body.resolution = resolution;
+    touch_stream_feature_report.body.orientation = orientation;
+    touch_stream_feature_report.body.x_max = sys_cpu_to_le16(x_max);
+    touch_stream_feature_report.body.y_max = sys_cpu_to_le16(y_max);
+}
+
+struct zmk_hid_touch_stream_feature_report *zmk_hid_get_touch_stream_feature_report() {
+    return &touch_stream_feature_report;
+}
+
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 // Keep track of how often a modifier was pressed.

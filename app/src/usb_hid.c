@@ -82,6 +82,15 @@ static int get_report_cb(const struct device *dev, struct usb_setup_packet *setu
             *data = (uint8_t *)&res_feature_report;
             break;
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+        case ZMK_HID_REPORT_ID_TOUCH_STREAM: {
+            struct zmk_hid_touch_stream_feature_report *report =
+                zmk_hid_get_touch_stream_feature_report();
+            *data = (uint8_t *)report;
+            *len = sizeof(*report);
+            break;
+        }
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
         default:
             return -ENOTSUP;
         }

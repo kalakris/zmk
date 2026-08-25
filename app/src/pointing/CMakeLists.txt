@@ -10,3 +10,4 @@ target_sources_ifdef(CONFIG_ZMK_INPUT_PROCESSOR_BEHAVIORS app PRIVATE input_proc
 target_sources_ifdef(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING app PRIVATE resolution_multipliers.c)
 target_sources_ifdef(CONFIG_ZMK_INPUT_SPLIT app PRIVATE input_split.c)
 target_sources_ifdef(CONFIG_ZMK_TOUCH_STREAM app PRIVATE touch_stream.c)
+target_sources_ifdef(CONFIG_ZMK_INPUT_PROCESSOR_TOUCH_STREAM_SCROLL app PRIVATE input_processor_touch_stream_scroll.c)

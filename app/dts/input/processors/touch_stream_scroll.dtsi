@@ -1,0 +1,12 @@
+/*
+ * Copyright (c) 2026 The ZMK Contributors
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/ {
+    /omit-if-no-ref/ zip_touch_stream_scroll: zip_touch_stream_scroll {
+        compatible = "zmk,input-processor-touch-stream-scroll";
+        #input-processor-cells = <0>;
+    };
+};

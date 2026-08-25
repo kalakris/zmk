@@ -271,6 +271,16 @@ static const uint8_t zmk_hid_report_desc[] = {
     HID_REPORT_SIZE(0x08),
     HID_REPORT_COUNT(0x07),
     HID_INPUT(ZMK_HID_MAIN_VAL_DATA | ZMK_HID_MAIN_VAL_VAR | ZMK_HID_MAIN_VAL_ABS),
+    // Capability feature report (same report ID, HID type Feature), readable
+    // via USB GET_REPORT and the BLE HOG feature report characteristic.
+    // 8 bytes: protocol version, pads-present bitmask, resolution (counts/mm),
+    // orientation bits, x-max (u16 LE), y-max (u16 LE).
+    HID_USAGE(0x03),
+    HID_LOGICAL_MIN8(0x00),
+    HID_LOGICAL_MAX16(0xFF, 0x00),
+    HID_REPORT_SIZE(0x08),
+    HID_REPORT_COUNT(0x08),
+    HID_FEATURE(ZMK_HID_MAIN_VAL_DATA | ZMK_HID_MAIN_VAL_VAR | ZMK_HID_MAIN_VAL_ABS),
     HID_END_COLLECTION,
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 };
@@ -379,6 +389,27 @@ struct zmk_hid_touch_stream_report {
     struct zmk_hid_touch_stream_report_body body;
 } __packed;
 
+#define ZMK_HID_TOUCH_STREAM_PROTOCOL_VERSION 2
+
+#define ZMK_HID_TOUCH_STREAM_ORIENT_ROTATE_90 BIT(0)
+#define ZMK_HID_TOUCH_STREAM_ORIENT_X_INVERT BIT(1)
+#define ZMK_HID_TOUCH_STREAM_ORIENT_Y_INVERT BIT(2)
+
+struct zmk_hid_touch_stream_feature_report_body {
+    uint8_t protocol_version;
+    uint8_t pads_present;   // bit0 = pad 0, bit1 = pad 1
+    uint8_t resolution;     // counts/mm, 0 = unknown
+    uint8_t orientation;    // ZMK_HID_TOUCH_STREAM_ORIENT_* bits, mirroring
+                            // the pad's devicetree transform properties
+    uint16_t x_max;         // LE
+    uint16_t y_max;         // LE
+} __packed;
+
+struct zmk_hid_touch_stream_feature_report {
+    uint8_t report_id;
+    struct zmk_hid_touch_stream_feature_report_body body;
+} __packed;
+
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 zmk_mod_flags_t zmk_hid_get_explicit_mods(void);
@@ -434,4 +465,7 @@ struct zmk_hid_mouse_report *zmk_hid_get_mouse_report();
 #if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 void zmk_hid_touch_stream_set(uint8_t pad_id, uint16_t x, uint16_t y, uint8_t z, uint8_t flags);
 struct zmk_hid_touch_stream_report *zmk_hid_get_touch_stream_report();
+void zmk_hid_touch_stream_set_feature(uint8_t pads_present, uint8_t resolution,
+                                      uint8_t orientation, uint16_t x_max, uint16_t y_max);
+struct zmk_hid_touch_stream_feature_report *zmk_hid_get_touch_stream_feature_report();
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)

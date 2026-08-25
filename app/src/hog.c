@@ -86,6 +86,11 @@ static struct hids_report touch_stream_input = {
     .type = HIDS_INPUT,
 };
 
+static struct hids_report touch_stream_feature = {
+    .id = ZMK_HID_REPORT_ID_TOUCH_STREAM,
+    .type = HIDS_FEATURE,
+};
+
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 #if IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
@@ -182,6 +187,15 @@ static ssize_t read_hids_touch_stream_input_report(struct bt_conn *conn,
         &zmk_hid_get_touch_stream_report()->body;
     return bt_gatt_attr_read(conn, attr, buf, len, offset, report_body,
                              sizeof(struct zmk_hid_touch_stream_report_body));
+}
+
+static ssize_t read_hids_touch_stream_feature_report(struct bt_conn *conn,
+                                                     const struct bt_gatt_attr *attr, void *buf,
+                                                     uint16_t len, uint16_t offset) {
+    struct zmk_hid_touch_stream_feature_report_body *report_body =
+        &zmk_hid_get_touch_stream_feature_report()->body;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, report_body,
+                             sizeof(struct zmk_hid_touch_stream_feature_report_body));
 }
 
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
@@ -309,6 +323,13 @@ BT_GATT_SERVICE_DEFINE(
     BT_GATT_CCC(input_ccc_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
     BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT, read_hids_report_ref,
                        NULL, &touch_stream_input),
+    // Touch stream capability feature report (readable, report-reference
+    // type Feature). Placed after the input report characteristic so the
+    // attrs[17] assumption above stays valid.
+    BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT, BT_GATT_CHRC_READ, BT_GATT_PERM_READ_ENCRYPT,
+                           read_hids_touch_stream_feature_report, NULL, NULL),
+    BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT, read_hids_report_ref,
+                       NULL, &touch_stream_feature),
 #endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 #if IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
