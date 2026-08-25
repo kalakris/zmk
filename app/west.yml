@@ -6,6 +6,8 @@ manifest:
       url-base: https://github.com/zmkfirmware
     - name: petejohanson
       url-base: https://github.com/petejohanson
+    - name: kalakris
+      url-base: https://github.com/kalakris
   projects:
     - name: zephyr
       remote: zmkfirmware
@@ -40,7 +42,9 @@ manifest:
       path: modules/msgs/zmk-studio-messages
       remote: zmkfirmware
     - name: cirque-input-module
-      remote: petejohanson
-      revision: 0de55f36bc720b5be3d8880dc856d4d78baf5214
+      remote: kalakris
+      # Fork of petejohanson/cirque-input-module (0de55f36) adding
+      # absolute-mode reporting for the raw touch stream prototype.
+      revision: raw-touch
   self:
     west-commands: scripts/west-commands.yml
