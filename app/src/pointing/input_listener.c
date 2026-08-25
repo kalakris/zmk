@@ -38,6 +38,13 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if VALID_LISTENER_COUNT > 0
 
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+// Whether the last mouse report actually sent had an all-zero body. The
+// mouse HID report is global (shared across listeners), so this is too.
+// Starts true: before anything is sent the host already assumes zeros.
+static bool last_mouse_report_empty = true;
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
 enum input_listener_xy_data_mode {
     INPUT_LISTENER_XY_DATA_MODE_NONE,
     INPUT_LISTENER_XY_DATA_MODE_REL,
@@ -333,7 +340,24 @@ static void input_handler(const struct input_listener_config *config,
             }
         }
 
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+        // In dual/scroll mode a wheel overlay scaling touch deltas down
+        // (e.g. 1:8) emits REL_WHEEL value 0 on most frames, which sets
+        // wheel_data.mode and defeats the emptiness check above, producing
+        // ~100 Hz all-zero mouse reports. Suppress a report whose entire
+        // body is zero - but only if the previously sent report was also
+        // all-zero, so a transition to zero (e.g. a button release) still
+        // goes out and click/drag semantics are preserved.
+        const struct zmk_hid_mouse_report_body *body = &zmk_hid_get_mouse_report()->body;
+        bool report_empty = body->buttons == 0 && body->d_x == 0 && body->d_y == 0 &&
+                            body->d_scroll_x == 0 && body->d_scroll_y == 0;
+        if (!report_empty || !last_mouse_report_empty) {
+            zmk_endpoints_send_mouse_report();
+            last_mouse_report_empty = report_empty;
+        }
+#else
         zmk_endpoints_send_mouse_report();
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
         zmk_hid_mouse_scroll_set(0, 0);
         zmk_hid_mouse_movement_set(0, 0);
 
