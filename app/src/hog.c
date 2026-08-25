@@ -79,6 +79,15 @@ static struct hids_report mouse_input = {
     .type = HIDS_INPUT,
 };
 
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+static struct hids_report touch_stream_input = {
+    .id = ZMK_HID_REPORT_ID_TOUCH_STREAM,
+    .type = HIDS_INPUT,
+};
+
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
 #if IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
 
 static struct hids_report mouse_feature = {
@@ -163,6 +172,19 @@ static ssize_t read_hids_mouse_input_report(struct bt_conn *conn, const struct b
     return bt_gatt_attr_read(conn, attr, buf, len, offset, report_body,
                              sizeof(struct zmk_hid_mouse_report_body));
 }
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+static ssize_t read_hids_touch_stream_input_report(struct bt_conn *conn,
+                                                   const struct bt_gatt_attr *attr, void *buf,
+                                                   uint16_t len, uint16_t offset) {
+    struct zmk_hid_touch_stream_report_body *report_body =
+        &zmk_hid_get_touch_stream_report()->body;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, report_body,
+                             sizeof(struct zmk_hid_touch_stream_report_body));
+}
+
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 #if IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
 
@@ -276,6 +298,18 @@ BT_GATT_SERVICE_DEFINE(
     BT_GATT_CCC(input_ccc_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
     BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT, read_hids_report_ref,
                        NULL, &mouse_input),
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+    // NOTE: send_touch_stream_report_callback below relies on this
+    // characteristic's declaration being attrs[17]; keep it directly after
+    // the mouse input report characteristic.
+    BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ_ENCRYPT, read_hids_touch_stream_input_report, NULL,
+                           NULL),
+    BT_GATT_CCC(input_ccc_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT),
+    BT_GATT_DESCRIPTOR(BT_UUID_HIDS_REPORT_REF, BT_GATT_PERM_READ_ENCRYPT, read_hids_report_ref,
+                       NULL, &touch_stream_input),
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 #if IS_ENABLED(CONFIG_ZMK_POINTING_SMOOTH_SCROLLING)
     BT_GATT_CHARACTERISTIC(BT_UUID_HIDS_REPORT,
@@ -461,6 +495,60 @@ int zmk_hog_send_mouse_report(struct zmk_hid_mouse_report_body *report) {
     return 0;
 };
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+K_MSGQ_DEFINE(zmk_hog_touch_stream_msgq, sizeof(struct zmk_hid_touch_stream_report_body),
+              CONFIG_ZMK_BLE_TOUCH_STREAM_REPORT_QUEUE_SIZE, 4);
+
+void send_touch_stream_report_callback(struct k_work *work) {
+    struct zmk_hid_touch_stream_report_body report;
+    while (k_msgq_get(&zmk_hog_touch_stream_msgq, &report, K_NO_WAIT) == 0) {
+        struct bt_conn *conn = zmk_ble_active_profile_conn();
+        if (conn == NULL) {
+            return;
+        }
+
+        // attrs[17] is the touch stream input report characteristic; see the
+        // comment in the service definition above.
+        struct bt_gatt_notify_params notify_params = {
+            .attr = &hog_svc.attrs[17],
+            .data = &report,
+            .len = sizeof(report),
+        };
+
+        int err = bt_gatt_notify_cb(conn, &notify_params);
+        if (err == -EPERM) {
+            bt_conn_set_security(conn, BT_SECURITY_L2);
+        } else if (err) {
+            LOG_DBG("Error notifying %d", err);
+        }
+
+        bt_conn_unref(conn);
+    }
+};
+
+K_WORK_DEFINE(hog_touch_stream_work, send_touch_stream_report_callback);
+
+int zmk_hog_send_touch_stream_report(struct zmk_hid_touch_stream_report_body *report) {
+    int err = k_msgq_put(&zmk_hog_touch_stream_msgq, report, K_NO_WAIT);
+    if (err) {
+        // Touch frames are ephemeral; drop the oldest frame rather than
+        // blocking the input processing path.
+        struct zmk_hid_touch_stream_report_body discarded_report;
+        k_msgq_get(&zmk_hog_touch_stream_msgq, &discarded_report, K_NO_WAIT);
+        err = k_msgq_put(&zmk_hog_touch_stream_msgq, report, K_NO_WAIT);
+        if (err) {
+            LOG_WRN("Failed to queue touch stream report to send (%d)", err);
+            return err;
+        }
+    }
+
+    k_work_submit_to_queue(&hog_work_q, &hog_touch_stream_work);
+
+    return 0;
+};
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 static int zmk_hog_init(void) {
     static const struct k_work_queue_config queue_config = {.name = "HID Over GATT Send Work"};

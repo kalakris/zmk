@@ -76,6 +76,7 @@
 #define ZMK_HID_REPORT_ID_LEDS 0x01
 #define ZMK_HID_REPORT_ID_CONSUMER 0x02
 #define ZMK_HID_REPORT_ID_MOUSE 0x03
+#define ZMK_HID_REPORT_ID_TOUCH_STREAM 0x04
 
 #ifndef HID_ITEM_TAG_PUSH
 #define HID_ITEM_TAG_PUSH 0xA
@@ -100,6 +101,8 @@
 #define HID_USAGE16(a, b) HID_ITEM(HID_ITEM_TAG_USAGE, HID_ITEM_TYPE_LOCAL, 2), a, b
 
 #define HID_USAGE16_SINGLE(a) HID_USAGE16((a & 0xFF), ((a >> 8) & 0xFF))
+
+#define HID_USAGE_PAGE16(a, b) HID_ITEM(HID_ITEM_TAG_USAGE_PAGE, HID_ITEM_TYPE_GLOBAL, 2), a, b
 
 static const uint8_t zmk_hid_report_desc[] = {
     HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
@@ -253,6 +256,23 @@ static const uint8_t zmk_hid_report_desc[] = {
     HID_END_COLLECTION,
     HID_END_COLLECTION,
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+    // Raw touch stream: vendor-defined report in its own top-level
+    // application collection so hosts (e.g. macOS) expose it as a separate
+    // HID device. 7 bytes: pad_id, x (u16 LE), y (u16 LE), z (u8), flags.
+    HID_USAGE_PAGE16(0x00, 0xFF), // Vendor-defined page 0xFF00
+    HID_USAGE(0x01),
+    HID_COLLECTION(HID_COLLECTION_APPLICATION),
+    HID_REPORT_ID(ZMK_HID_REPORT_ID_TOUCH_STREAM),
+    HID_USAGE(0x02),
+    HID_LOGICAL_MIN8(0x00),
+    HID_LOGICAL_MAX16(0xFF, 0x00),
+    HID_REPORT_SIZE(0x08),
+    HID_REPORT_COUNT(0x07),
+    HID_INPUT(ZMK_HID_MAIN_VAL_DATA | ZMK_HID_MAIN_VAL_VAR | ZMK_HID_MAIN_VAL_ABS),
+    HID_END_COLLECTION,
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 };
 
 #if IS_ENABLED(CONFIG_ZMK_USB_BOOT)
@@ -341,6 +361,26 @@ struct zmk_hid_mouse_resolution_feature_report {
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
 
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+#define ZMK_HID_TOUCH_STREAM_FLAGS_TOUCHED BIT(0)
+#define ZMK_HID_TOUCH_STREAM_FLAGS_SCROLL_MODE BIT(1)
+
+struct zmk_hid_touch_stream_report_body {
+    uint8_t pad_id;
+    uint16_t x;
+    uint16_t y;
+    uint8_t z;
+    uint8_t flags;
+} __packed;
+
+struct zmk_hid_touch_stream_report {
+    uint8_t report_id;
+    struct zmk_hid_touch_stream_report_body body;
+} __packed;
+
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
 zmk_mod_flags_t zmk_hid_get_explicit_mods(void);
 int zmk_hid_register_mod(zmk_mod_t modifier);
 int zmk_hid_unregister_mod(zmk_mod_t modifier);
@@ -390,3 +430,8 @@ zmk_hid_boot_report_t *zmk_hid_get_boot_report();
 #if IS_ENABLED(CONFIG_ZMK_POINTING)
 struct zmk_hid_mouse_report *zmk_hid_get_mouse_report();
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+void zmk_hid_touch_stream_set(uint8_t pad_id, uint16_t x, uint16_t y, uint8_t z, uint8_t flags);
+struct zmk_hid_touch_stream_report *zmk_hid_get_touch_stream_report();
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)

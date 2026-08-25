@@ -15,3 +15,7 @@ int zmk_hog_send_consumer_report(struct zmk_hid_consumer_report_body *body);
 #if IS_ENABLED(CONFIG_ZMK_POINTING)
 int zmk_hog_send_mouse_report(struct zmk_hid_mouse_report_body *body);
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+int zmk_hog_send_touch_stream_report(struct zmk_hid_touch_stream_report_body *body);
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)

@@ -8,6 +8,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#include <zephyr/sys/byteorder.h>
+
 #include <zmk/hid.h>
 #include <dt-bindings/zmk/modifiers.h>
 
@@ -32,6 +34,26 @@ static struct zmk_hid_mouse_report mouse_report = {
     .body = {.buttons = 0, .d_x = 0, .d_y = 0, .d_scroll_y = 0}};
 
 #endif // IS_ENABLED(CONFIG_ZMK_POINTING)
+
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
+static struct zmk_hid_touch_stream_report touch_stream_report = {
+    .report_id = ZMK_HID_REPORT_ID_TOUCH_STREAM,
+    .body = {.pad_id = 0, .x = 0, .y = 0, .z = 0, .flags = 0}};
+
+void zmk_hid_touch_stream_set(uint8_t pad_id, uint16_t x, uint16_t y, uint8_t z, uint8_t flags) {
+    touch_stream_report.body.pad_id = pad_id;
+    touch_stream_report.body.x = sys_cpu_to_le16(x);
+    touch_stream_report.body.y = sys_cpu_to_le16(y);
+    touch_stream_report.body.z = z;
+    touch_stream_report.body.flags = flags;
+}
+
+struct zmk_hid_touch_stream_report *zmk_hid_get_touch_stream_report() {
+    return &touch_stream_report;
+}
+
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
 
 // Keep track of how often a modifier was pressed.
 // Only release the modifier if the count is 0.
