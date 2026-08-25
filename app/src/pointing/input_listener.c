@@ -206,21 +206,26 @@ static int apply_config(uint8_t listener_index, const struct input_listener_conf
     return ZMK_INPUT_PROC_CONTINUE;
 }
 
-static int filter_with_input_config(const struct input_listener_config *cfg,
-                                    struct input_listener_data *data, struct input_event *evt) {
-    if (!evt->dev) {
-        return -ENODEV;
-    }
+typedef int (*input_config_entry_visitor_t)(const struct input_listener_config_entry *entry,
+                                            int override_index, void *user_data);
 
+// Walk the config entries that would process an event from this listener
+// right now, in effective order: layer overrides are scanned in devicetree
+// order, an override is visited once per active layer bit in its mask, and
+// an active override without process-next ends the walk after its first
+// visit, shadowing later overrides and the base chain. The base chain is
+// visited last (override_index == -1) when still reachable. A negative
+// return from the visitor aborts the walk and is propagated; the base
+// visit's return value becomes the walk's result.
+static int for_each_effective_config_entry(const struct input_listener_config *cfg,
+                                           input_config_entry_visitor_t visit, void *user_data) {
     for (size_t oi = 0; oi < cfg->layer_overrides_len; oi++) {
         const struct input_listener_layer_override *override = &cfg->layer_overrides[oi];
-        struct input_listener_processor_data *override_data = &data->layer_override_data[oi];
         uint32_t mask = override->layer_mask;
         uint8_t layer = 0;
         while (mask != 0) {
             if (mask & BIT(0) && zmk_keymap_layer_active(layer)) {
-                int ret =
-                    apply_config(cfg->listener_index, &override->config, override_data, data, evt);
+                int ret = visit(&override->config, (int)oi, user_data);
 
                 if (ret < 0) {
                     return ret;
@@ -235,7 +240,33 @@ static int filter_with_input_config(const struct input_listener_config *cfg,
         }
     }
 
-    return apply_config(cfg->listener_index, &cfg->base, &data->base_processor_data, data, evt);
+    return visit(&cfg->base, -1, user_data);
+}
+
+struct apply_config_visit_ctx {
+    const struct input_listener_config *cfg;
+    struct input_listener_data *data;
+    struct input_event *evt;
+};
+
+static int apply_config_visitor(const struct input_listener_config_entry *entry, int override_index,
+                                void *user_data) {
+    struct apply_config_visit_ctx *ctx = user_data;
+    struct input_listener_processor_data *processor_data =
+        override_index >= 0 ? &ctx->data->layer_override_data[override_index]
+                            : &ctx->data->base_processor_data;
+
+    return apply_config(ctx->cfg->listener_index, entry, processor_data, ctx->data, ctx->evt);
+}
+
+static int filter_with_input_config(const struct input_listener_config *cfg,
+                                    struct input_listener_data *data, struct input_event *evt) {
+    if (!evt->dev) {
+        return -ENODEV;
+    }
+
+    struct apply_config_visit_ctx ctx = {.cfg = cfg, .data = data, .evt = evt};
+    return for_each_effective_config_entry(cfg, apply_config_visitor, &ctx);
 }
 
 static void clear_xy_data(struct input_listener_xy_data *data) {
@@ -440,29 +471,25 @@ static bool config_entry_has_scroll_marker(const struct input_listener_config_en
     return false;
 }
 
-static bool layer_override_active(const struct input_listener_layer_override *override) {
-    uint32_t mask = override->layer_mask;
-    uint8_t layer = 0;
-    while (mask != 0) {
-        if (mask & BIT(0) && zmk_keymap_layer_active(layer)) {
-            return true;
-        }
+static int scroll_marker_visitor(const struct input_listener_config_entry *entry,
+                                 int override_index, void *user_data) {
+    ARG_UNUSED(override_index);
 
-        layer++;
-        mask = mask >> 1;
+    if (config_entry_has_scroll_marker(entry)) {
+        *(bool *)user_data = true;
+        return -ECANCELED; // Found; abort the walk early.
     }
 
-    return false;
+    return ZMK_INPUT_PROC_CONTINUE;
 }
 
 // Evaluate whether a zmk,input-processor-touch-stream-scroll marker sits in
 // the processor chain that would handle an event from input_dev right now.
-// This mirrors the routing in filter_with_input_config(): overrides are
-// scanned in order; an active override containing the marker counts, and an
-// active override without process-next shadows everything after it
-// (including the base chain). Driven purely by current layer state, so it
-// is correct with no event in flight (e.g. the first frame of a touch with
-// the layer already held). Keep in sync with filter_with_input_config().
+// Uses the same effective-chain walk as filter_with_input_config(), so
+// override ordering and process-next shadowing match real event routing
+// exactly. Driven purely by current layer state, so it is correct with no
+// event in flight (e.g. the first frame of a touch with the layer already
+// held).
 bool zmk_input_listener_touch_stream_scroll_active(const struct device *input_dev) {
     for (size_t i = 0; i < ARRAY_SIZE(touch_stream_listener_configs); i++) {
         const struct input_listener_config *cfg = touch_stream_listener_configs[i];
@@ -470,24 +497,9 @@ bool zmk_input_listener_touch_stream_scroll_active(const struct device *input_de
             continue;
         }
 
-        bool base_reachable = true;
-        for (size_t oi = 0; oi < cfg->layer_overrides_len; oi++) {
-            const struct input_listener_layer_override *override = &cfg->layer_overrides[oi];
-            if (!layer_override_active(override)) {
-                continue;
-            }
-
-            if (config_entry_has_scroll_marker(&override->config)) {
-                return true;
-            }
-
-            if (!override->process_next) {
-                base_reachable = false;
-                break;
-            }
-        }
-
-        if (base_reachable && config_entry_has_scroll_marker(&cfg->base)) {
+        bool found = false;
+        for_each_effective_config_entry(cfg, scroll_marker_visitor, &found);
+        if (found) {
             return true;
         }
     }
