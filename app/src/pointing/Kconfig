@@ -45,6 +45,25 @@ config ZMK_INPUT_PROCESSOR_TEMP_LAYER_MAX_ACTION_EVENTS
     default 4
     depends on ZMK_INPUT_PROCESSOR_TEMP_LAYER
 
+config ZMK_TOUCH_STREAM
+    bool "Stream raw absolute touch frames over a vendor HID report"
+    default n
+    depends on DT_HAS_CIRQUE_PINNACLE_ENABLED
+    help
+      Stream absolute touch frames (position + touch strength) from a
+      Cirque Pinnacle trackpad running in absolute mode (abs-mode
+      devicetree property) to the host over a vendor-defined HID report,
+      over both USB and BLE. While the configured scroll layer is active,
+      the pad's motion is withheld from the normal pointer pipeline so the
+      host can synthesize scrolling from the raw frames; otherwise
+      relative deltas are derived in firmware and fed to the existing
+      input listener chain.
+
+config ZMK_TOUCH_STREAM_SCROLL_LAYER
+    int "Keymap layer that marks touch stream frames as scroll mode"
+    default 2
+    depends on ZMK_TOUCH_STREAM
+
 endif
 
 config ZMK_INPUT_PROCESSOR_TRANSFORM

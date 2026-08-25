@@ -292,6 +292,17 @@ static void input_handler(const struct input_listener_config *config,
     }
 
     if (evt->sync) {
+#if IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+        // Absolute touch frames (streamed separately, see touch_stream.c)
+        // sync at ~100 Hz without accumulating any mouse state here; skip
+        // sending empty mouse reports for them.
+        if (data->mouse.data.mode == INPUT_LISTENER_XY_DATA_MODE_NONE &&
+            data->mouse.wheel_data.mode == INPUT_LISTENER_XY_DATA_MODE_NONE &&
+            data->mouse.button_set == 0 && data->mouse.button_clear == 0) {
+            return;
+        }
+#endif // IS_ENABLED(CONFIG_ZMK_TOUCH_STREAM)
+
         if (data->mouse.wheel_data.mode == INPUT_LISTENER_XY_DATA_MODE_REL) {
             zmk_hid_mouse_scroll_set(data->mouse.wheel_data.x.value,
                                      data->mouse.wheel_data.y.value);
