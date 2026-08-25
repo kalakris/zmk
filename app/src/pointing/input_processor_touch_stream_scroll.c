@@ -12,7 +12,7 @@
  * layer is active), the touch-stream module sets the scroll-mode flag on
  * that pad's streamed frames. The evaluation happens in input_listener.c
  * (zmk_input_listener_touch_stream_scroll_active()), which needs a way to
- * recognize instances of this processor - hence the instance registry here.
+ * recognize instances of this processor - hence the api-pointer check here.
  */
 
 #define DT_DRV_COMPAT zmk_input_processor_touch_stream_scroll
@@ -40,16 +40,6 @@ static int tss_init(const struct device *dev) { return 0; }
 
 DT_INST_FOREACH_STATUS_OKAY(TSS_INST)
 
-#define TSS_DEV_REF(n) DEVICE_DT_INST_GET(n),
-
-static const struct device *const tss_devices[] = {DT_INST_FOREACH_STATUS_OKAY(TSS_DEV_REF)};
-
 bool zmk_input_processor_is_touch_stream_scroll(const struct device *dev) {
-    for (size_t i = 0; i < ARRAY_SIZE(tss_devices); i++) {
-        if (tss_devices[i] == dev) {
-            return true;
-        }
-    }
-
-    return false;
+    return dev->api == &tss_driver_api;
 }

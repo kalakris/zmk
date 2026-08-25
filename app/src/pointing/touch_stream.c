@@ -38,6 +38,8 @@
  * existing button processors apply.
  */
 
+#include <stdlib.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -127,8 +129,9 @@ static void touch_stream_process_frame(void) {
     uint8_t flags = (touched ? ZMK_HID_TOUCH_STREAM_FLAGS_TOUCHED : 0) |
                     (scroll_mode ? ZMK_HID_TOUCH_STREAM_FLAGS_SCROLL_MODE : 0);
 
-    zmk_hid_touch_stream_set(TOUCH_STREAM_PAD_ID, touched ? cur_x : 0, touched ? cur_y : 0,
-                             touched ? cur_z : 0, flags);
+    /* !touched implies cur_x/y/z are all zero (that is how touched is
+     * derived above), so the release report's zeros need no special case. */
+    zmk_hid_touch_stream_set(TOUCH_STREAM_PAD_ID, cur_x, cur_y, cur_z, flags);
     zmk_endpoints_send_touch_stream_report();
 
     if (touched && !prev_touched) {
@@ -143,10 +146,9 @@ static void touch_stream_process_frame(void) {
     tap_scroll_seen = tap_scroll_seen || scroll_mode;
 
     if (touched && tap_candidate) {
-        int32_t travel_x = (int32_t)cur_x - (int32_t)touch_down_x;
-        int32_t travel_y = (int32_t)cur_y - (int32_t)touch_down_y;
-        if (MAX(travel_x < 0 ? -travel_x : travel_x, travel_y < 0 ? -travel_y : travel_y) >
-            TOUCH_TAP_MAX_MOVEMENT) {
+        int travel_x = (int)cur_x - (int)touch_down_x;
+        int travel_y = (int)cur_y - (int)touch_down_y;
+        if (MAX(abs(travel_x), abs(travel_y)) > TOUCH_TAP_MAX_MOVEMENT) {
             tap_candidate = false;
         }
     }
