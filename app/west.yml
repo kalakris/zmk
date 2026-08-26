@@ -43,8 +43,8 @@ manifest:
       remote: zmkfirmware
     - name: cirque-input-module
       remote: kalakris
-      # Fork of petejohanson/cirque-input-module (0de55f36) adding
-      # absolute-mode reporting for the raw touch stream prototype.
-      revision: raw-touch
+      # EXPERIMENT: upstream Zephyr v4.1.0 in-tree input_pinnacle driver
+      # vendored as an out-of-tree module (see intree-driver-test branch).
+      revision: intree-driver-test
   self:
     west-commands: scripts/west-commands.yml

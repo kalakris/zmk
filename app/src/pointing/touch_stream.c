@@ -61,14 +61,21 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 static const struct device *const touch_dev = DEVICE_DT_GET(TOUCH_DEV_NODE);
 
-/* The Pinnacle's invert/rotate feed transforms only apply to its relative
- * mode, so mirror them here when deriving pointer deltas from the raw
- * absolute coordinates. The streamed frames stay untransformed; the same
- * property values are exposed verbatim in the feature report's orientation
- * byte so hosts can apply them. */
-#define TOUCH_ROTATE_90 DT_PROP(TOUCH_DEV_NODE, rotate_90)
-#define TOUCH_X_INVERT DT_PROP(TOUCH_DEV_NODE, x_invert)
-#define TOUCH_Y_INVERT DT_PROP(TOUCH_DEV_NODE, y_invert)
+/* Orientation.
+ *
+ * The in-tree Zephyr Pinnacle driver splits the feed transforms by mode:
+ * invert-x / invert-y are programmed into FeedConfig1 only in ABSOLUTE
+ * mode, while swap-xy goes into FeedConfig2 only in RELATIVE mode. So in
+ * the absolute stream the inversions are already applied by the ASIC and
+ * must NOT be mirrored here, but the 90-degree rotation is not, and still
+ * has to be applied in software when deriving pointer deltas.
+ *
+ * The streamed frames stay exactly as the ASIC produced them; the
+ * orientation byte in the feature report therefore advertises only the
+ * transforms the host still has to apply itself (i.e. the rotation). */
+#define TOUCH_ROTATE_90 DT_PROP(TOUCH_DEV_NODE, swap_xy)
+#define TOUCH_X_INVERT 0
+#define TOUCH_Y_INVERT 0
 
 /* Firmware tap-to-click configuration (pad devicetree, default off). */
 #define TOUCH_TAP_CLICK DT_PROP(TOUCH_DEV_NODE, stream_tap_click)
